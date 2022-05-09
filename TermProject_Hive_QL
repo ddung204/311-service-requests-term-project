@@ -1,0 +1,106 @@
+// 1. We scp our downloaded data from local machine to our linux server
+
+scp -r /c/Users/Local/Downloads/LA_TSVs.zip mmonta41@129.153.108.75:/home/mmonta41
+
+// 2. We check if the files are on our linux. and make sure to unzip.
+
+-bash-4.2$ unzip LA_TSVs.zip
+
+// 3. combine tsvs into one file we will work to query from 
+ 
+-bash-4.2$ awk '(NR == 1) || (FNR > 1)' MyLA311_Service_Request_Data_2015.tsv MyLA311_Service_Request_Data_2016.tsv MyLA311_Service_Request_Data_2017.tsv MyLA311_Service_Request_Data_2018.tsv MyLA311_Service_Request_Data_2019.tsv MyLA311_Service_Request_Data_2020.tsv MyLA311_Service_Request_Data_2021.tsv MyLA311_Service_Request_Data_2022.tsv > datacombined.tsv
+
+// 4. create hdfs directory and put datacombined in there and make sure its working
+
+-bash-4.2$ hdfs dfs -mkdir /user/mmonta41/project_data
+-bash-4.2$ hdfs dfs -put datacombined.tsv /user/mmonta41/project_data
+
+
+// 5.Enter beeline CLI to write HIVEQLs
+
+CREATE EXTERNAL TABLE IF NOT EXISTS servicerqs ( 
+ SRNumber string,
+ CreatedDate string,
+ UpdatedDate string,
+ ActionTaken string,
+ Owner string,
+ RequestType string,
+ Status string,
+ RequestSource string,
+ MobileOS string,
+ Anonymous string,
+ AssignTo string,
+ ServiceDate string,
+ ClosedDate string,
+ AddressVerified string,
+ ApproximateAddress string,
+ Address string,
+ HouseNumber int,
+ Direction string,
+ StreetName string,
+ Suffix string,
+ ZipCode string,
+ Latitude float,
+ Longitude float,
+ Location float,
+ TBMPage int,
+ TBMColumn string,
+ TBMRow int,
+ APC string,
+ CD int,
+ CDMember string,
+ NC int,
+ NCName string,
+ PolicePrecinct string )
+
+ROW FORMAT DELIMITED 
+
+FIELDS TERMINATED BY "\t"
+
+LOCATION "/user/mmonta41/project_data/"
+
+TBLPROPERTIES ('skip.header.line.count' = '1');
+
+
+// 6. create table for heatmap
+
+CREATE TABLE IF NOT EXISTS request_addresses 
+AS SELECT srnumber , address
+from servicerqs
+group by zipcode;
+
+//or to create heatmap by zipcode which is the option we went with as it simplified things 
+
+CREAET TABLE AS SELECT COUNT(zipcode)
+FROM servicerqs
+GROUP BY zipcode;
+
+// 7. create table for pie chart of request types
+
+SELECT COUNT(requesttype) 
+FROM request_types
+GROUP BY requesttype;
+
+
+// 8. extract from hdfs to linux to create visuals
+
+INSERT OVERWRITE DIRECTORY '/user/mmonta41/project_data/' 
+ROW FORMAT DELIMITED FIELDS TERMINATED BY '\t' 
+select * FROM request_addresses;
+
+INSERT OVERWRITE DIRECTORY '/user/mmonta41/project_data/'
+select * FROM request_addresses;
+
+-bash-4.2$ hdfs dfs -get /user/mmonta41/project_data/
+
+// 9. This is an example of combining the files map reduce made into one .csv. The same process would be followed for exporting data of all queries
+
+-bash-4.2$ cat 000000_0 000001_0 000002_0 000003_0 000004_0 000005_0 000006_0 000007_0 000008_0 000009_0 000010_0 000011_0 000012_0 000013_0 000014_0 > heatmap.csv
+
+-bash-4.2$ scp mmonta41@54.218.99.3:/home/mmonta41/project_data/heatmap.csv heatmap.csv
+
+//Once you have the .csv it can be imported into Tableu or Excel BI to create the visuals 
+
+
+
+
